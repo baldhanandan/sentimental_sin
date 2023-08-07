@@ -1,0 +1,135 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+rm(list = ls() )
+library (twitteR)
+
+#install.packages(c("ROAuth","plyr","stringr","ggplot2"), dependencies = T)
+library(ROAuth)
+library(plyr)
+library(stringr)
+library(ggplot2)
+
+options(RCurlOptions = list(cainfo = system.file("CurlSSL", "cacert.pem", package = "RCurl")))
+
+download.file(url='http://curl.haxx.se/ca/cacert.pem', destfile ='cacert.pem')
+
+#Accessing the twitter API
+requestURL <- 'https://api.twitter.com/oauth/request_token'
+accessURL <- 'https://api.twitter.com/oauth/access_token'
+authURL <- 'http://api.twitter.com/oauth/authorize'
+api_key="Cjg1kCoGwyPhgpHvoYFVUrpTK"
+api_secret="bVNJYmPm7mI8gqNk9bGrrGR9tLmvpsoX6IVQTKCGrTh4wa4wwn"
+access_token="1233730029680349185-n696h6k7QVoIMtJ7K7ZEvYAeGCVcEU"
+access_token_secret="D1gyIxFLEfy9cZpGRnJdkiNfUDzzfu7wIhijKWLVHgo1Q"
+
+#save these credentials and register
+setup_twitter_oauth(api_key,api_secret,access_token, access_token_secret)
+
+
+
+```
+
+```{r}
+KiskiDilli.list <- searchTwitter('ipl', n=500, lang="en", since=NULL, until=NULL, retryOnRateLimit=10) 
+KiskiDilli.df <- twListToDF(KiskiDilli.list)
+write.csv(KiskiDilli.df, file='KiskiDilli.csv', row.names =F)
+```
+
+
+```{r}
+library(plyr)
+library(stringr)
+
+# calculating sentiment score
+
+score_sentiment = function(sentences, positive_words, negative_words, .progress='none')
+{
+  require(plyr)
+  require(stringr)
+  
+  scores = laply(sentences, function(sentence, positive_words, negative_words)
+  {
+    sentence = gsub('[[:punct:]]', '', sentence)
+    sentence = gsub('[[:cntrl:]]', '', sentence)
+    sentence = gsub('\\d+', '', sentence)
+    
+    sentence = tolower(sentence)
+    word.list = str_split(sentence, '\\s+')
+    words = unlist(word.list)
+    
+    positive_matches = match(words, positive_words)
+    negative_matches = match(words, negative_words)
+    
+    positive_matches = !is.na(positive_matches)
+    negative_matches = !is.na(negative_matches)
+    
+    score = sum(positive_matches) - sum(negative_matches)
+    return(score)    
+  }, positive_words, negative_words, .progress=.progress)
+  scores.df = data.frame(score = scores, text = sentences)
+  return(scores.df)
+}
+```
+
+
+```{r}
+positive_words = scan ('D:/sem 6/sin/project/final/Twitter - Sentiment Analysis/positive-words.txt', what = 'character', comment.char =';')
+negative_words = scan ('D:/sem 6/sin/project/final/Twitter - Sentiment Analysis/negative-words.txt', what = 'character', comment.char =';')
+
+#import csv file
+datasetKiskiDilli <- read.csv('KiskiDilli.csv')
+datasetKiskiDilli$text <-as.factor(datasetKiskiDilli$text) 
+```
+```{r}
+Dilli.scores = score_sentiment(datasetKiskiDilli$text, positive_words, negative_words, .progress='text')
+path <- "D:/sem 6/sin/project/final/Twitter - Sentiment Analysis"
+write.csv(Dilli.scores, file = paste(path,"KiskiDilliscore.csv",sep =""), row.names = TRUE)
+
+
+```
+```{r}
+library(RColorBrewer)
+#dev.new(width=5, height=4, unit="in")
+plot(1:20)
+hist(Dilli.scores$score, xlab='score of tweets', col=brewer.pal(9,'Set3'))
+dev.new(width=5, height=4, unit="in")
+plot(1:20)
+qplot(Dilli.scores$score, xlab='score of tweets')
+```
+```{r}
+library(twitteR)
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+
+
+
+
+goatmovie <- searchTwitter("ipl", n=100, lang="en", retryOnRateLimit=1000) 
+goatmovie_text = sapply(goatmovie, function(x) x$getText())
+goatmovie_corpus = Corpus(VectorSource(goatmovie_text))
+
+
+
+tdm = TermDocumentMatrix(
+  goatmovie_corpus,
+  control = list(
+    removePunctuation = TRUE,
+    stopwords = c("ipl", "ipl", stopwords("english")),
+    removeNumbers = TRUE, tolower = TRUE)
+)
+
+m = as.matrix(tdm)
+# get word counts in decreasing order
+word_freqs = sort(rowSums(m), decreasing = TRUE) 
+# create a data frame with words and their frequencies
+dm = data.frame(word = names(word_freqs), freq = word_freqs)
+library(RColorBrewer)
+library(ggplot2)
+wordcloud(dm$word, dm$freq, random.order = FALSE, colors = brewer.pal(9, "YlOrRd" ))
+```
+
